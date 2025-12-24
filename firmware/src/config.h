@@ -3,14 +3,14 @@
 // =============================================================================
 // WiFi Configuration
 // =============================================================================
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID "Labofix2"
+#define WIFI_PASSWORD "labofix123"
 #define WIFI_CONNECT_TIMEOUT_SEC 30
 
 // =============================================================================
 // InfluxDB Configuration
 // =============================================================================
-#define INFLUXDB_URL "http://192.168.1.100:8086"
+#define INFLUXDB_URL "http://192.168.1.216:8086"
 #define INFLUXDB_ORG "home"
 #define INFLUXDB_BUCKET "power_monitoring"
 #define INFLUXDB_TOKEN "my-super-secret-token"
