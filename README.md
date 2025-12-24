@@ -1,11 +1,13 @@
 # Трёхфазный монитор напряжения на ESP32-S3
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32--S3-orange)](https://platformio.org/)
+[![Grafana](https://img.shields.io/badge/Grafana-Dashboard-F46800)](https://grafana.com/)
+[![InfluxDB](https://img.shields.io/badge/InfluxDB-Time--Series-22ADF6)](https://www.influxdata.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Обзор проекта
 
-Система мониторинга трёхфазной электросети (380В/220В) на базе микроконтроллера **ESP32-S3** и трёх датчиков напряжения **ZMPT101B**. Устройство измеряет параметры сети в реальном времени, анализирует качество электроэнергии и предоставляет данные через веб-интерфейс с обновлением по WebSocket.
+Система мониторинга трёхфазной электросети (380В/220В) на базе микроконтроллера **ESP32-S3** и трёх датчиков напряжения **ZMPT101B**. Устройство измеряет параметры сети в реальном времени и отправляет данные в **InfluxDB** для визуализации в **Grafana**.
 
 ### Основные функции
 
@@ -13,14 +15,14 @@
 |---------|----------|
 | **📊 Измерение напряжения** | RMS напряжение каждой фазы (A, B, C) |
 | **📈 Междуфазное напряжение** | Линейные напряжения AB, BC, CA |
-| **🔄 Частота сети** | Измерение частоты 50/60 Гц методом Zero-Crossing |
+| **🔄 Частота сети** | Измерение частоты 50 Гц методом Zero-Crossing |
 | **⚖️ Перекос фаз** | Расчёт несимметрии напряжений (%) |
 | **🚨 Детекция проблем** | Обрыв фазы, превышение/занижение напряжения |
-| **🌐 Real-time веб-интерфейс** | Графики и индикаторы через WebSocket |
+| **📉 Grafana Dashboard** | Real-time графики, история, алерты |
 
 ---
 
-## Технический стек
+## Технический стек (финальный)
 
 ### Аппаратное обеспечение
 
@@ -34,81 +36,150 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      FIRMWARE (ESP32-S3)                    │
+│                 1. FIRMWARE (ESP32-S3)                      │
 ├─────────────────────────────────────────────────────────────┤
-│  Framework: Arduino + ESP-IDF                               │
 │  Platform:  PlatformIO                                      │
-├─────────────────────────────────────────────────────────────┤
-│                       БИБЛИОТЕКИ                            │
+│  Framework: Arduino                                         │
 ├──────────────────┬──────────────────────────────────────────┤
-│ ESPAsyncWebServer│ Асинхронный HTTP/WebSocket сервер        │
-│ ArduinoJson      │ Сериализация данных в JSON               │
-│ LittleFS         │ Файловая система для веб-файлов          │
+│ ArduinoJson      │ Формирование JSON/Line Protocol          │
+│ WiFi             │ Подключение к сети                       │
+│ HTTPClient       │ Отправка данных в InfluxDB               │
 │ Preferences      │ Хранение настроек калибровки             │
-├──────────────────┴──────────────────────────────────────────┤
-│                      FRONTEND                               │
+└──────────────────┴──────────────────────────────────────────┘
+                            │
+                            ▼ HTTP POST (InfluxDB Line Protocol)
+┌─────────────────────────────────────────────────────────────┐
+│                 2. INFLUXDB 2.x                             │
 ├─────────────────────────────────────────────────────────────┤
-│  HTML5 + CSS3 (Grid/Flexbox)                                │
-│  JavaScript (ES6+, WebSocket API)                           │
-│  Chart.js — графики в реальном времени                      │
+│  • Time-series база данных                                  │
+│  • Bucket: "power_monitoring"                               │
+│  • Retention: 30 дней (raw), 1 год (downsampled)           │
+│  • Встроенные Tasks для агрегации                          │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   ▼ Flux queries
+┌─────────────────────────────────────────────────────────────┐
+│                 3. GRAFANA 10.x                             │
+├─────────────────────────────────────────────────────────────┤
+│  • Real-time дашборды                                       │
+│  • Встроенная система алертов                              │
+│  • Уведомления: Email, Telegram, Webhook                   │
+│  • Аннотации для событий                                    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Почему выбран этот стек?
+### Почему этот стек?
 
-| Технология | Почему |
-|------------|--------|
-| **WebSocket** | Двунаправленная связь, низкая задержка (<50ms), идеально для real-time данных |
-| **ESPAsyncWebServer** | Неблокирующий сервер, поддержка WebSocket из коробки |
-| **Chart.js** | Лёгкая библиотека (~60KB), hardware-accelerated canvas, real-time обновление |
-| **LittleFS** | Wear-leveling, надёжнее SPIFFS, поддержка директорий |
+| Компонент | Почему выбран |
+|-----------|---------------|
+| **InfluxDB 2.x** | Оптимизирована для time-series, встроенный HTTP API, Flux язык запросов |
+| **Grafana** | Лучший инструмент визуализации, встроенные алерты, zero-code настройка |
+| **HTTP POST** | Проще WebSocket для ESP32, надёжнее при потере связи |
+| **Line Protocol** | Компактный формат, нативный для InfluxDB |
 
 ---
 
 ## Архитектура системы
 
-### Схема потоков данных
+### Полная схема
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Сеть 380В  │     │   Сеть 380В  │     │   Сеть 380В  │
-│    Фаза A    │     │    Фаза B    │     │    Фаза C    │
-└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-       │                    │                    │
-       ▼                    ▼                    ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  ZMPT101B #1 │     │  ZMPT101B #2 │     │  ZMPT101B #3 │
-│  (изоляция)  │     │  (изоляция)  │     │  (изоляция)  │
-└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
-       │ 0-3.3V             │ 0-3.3V             │ 0-3.3V
-       ▼                    ▼                    ▼
-┌─────────────────────────────────────────────────────────┐
-│                      ESP32-S3                           │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │              ADC1 (12-bit, 10kHz)                 │  │
-│  │         GPIO1      GPIO2      GPIO3               │  │
-│  └───────────────────────┬───────────────────────────┘  │
-│                          │                              │
-│  ┌───────────────────────▼───────────────────────────┐  │
-│  │            Signal Processing Task                 │  │
-│  │  • RMS Calculation (N samples per period)         │  │
-│  │  • Zero-Crossing Frequency Detection              │  │
-│  │  • Unbalance & Anomaly Detection                  │  │
-│  └───────────────────────┬───────────────────────────┘  │
-│                          │                              │
-│  ┌───────────────────────▼───────────────────────────┐  │
-│  │              WebSocket Server (:80/ws)            │  │
-│  │           JSON @ 1-10 updates/sec                 │  │
-│  └───────────────────────┬───────────────────────────┘  │
-└──────────────────────────┼──────────────────────────────┘
-                           │ WiFi
-                           ▼
-                    ┌──────────────┐
-                    │   Browser    │
-                    │  Dashboard   │
-                    │  (Chart.js)  │
-                    └──────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ФИЗИЧЕСКИЙ УРОВЕНЬ                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+       │              │              │
+   Фаза A         Фаза B         Фаза C        (Сеть 380В)
+       │              │              │
+       ▼              ▼              ▼
+┌──────────────┬──────────────┬──────────────┐
+│  ZMPT101B #1 │  ZMPT101B #2 │  ZMPT101B #3 │  Гальваническая развязка
+└──────┬───────┴──────┬───────┴──────┬───────┘
+       │ 0-3.3V       │ 0-3.3V       │ 0-3.3V
+       ▼              ▼              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ESP32-S3 (Датчик)                                 │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  ADC1 (12-bit, 10kHz sampling)                                        │ │
+│  │       ↓                                                                │ │
+│  │  Signal Processing:                                                    │ │
+│  │    • RMS Calculation                                                   │ │
+│  │    • Zero-Crossing → Frequency                                        │ │
+│  │    • Unbalance Detection                                               │ │
+│  │       ↓                                                                │ │
+│  │  InfluxDB Client (HTTP POST, Line Protocol)                           │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────┬─────────────────────────────┘
+                                                │ WiFi
+                                                │ HTTP POST каждые 1 сек
+                                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    СЕРВЕР (VPS / Raspberry Pi / NAS / Docker)               │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                         INFLUXDB 2.7                                   │ │
+│  │  ─────────────────────────────────────────────────────────────────────│ │
+│  │  Organization: home                                                    │ │
+│  │  Bucket: power_monitoring                                              │ │
+│  │                                                                        │ │
+│  │  Measurements:                                                         │ │
+│  │    • voltage (phase=A/B/C) — фазные напряжения                        │ │
+│  │    • line_voltage (phases=AB/BC/CA) — междуфазные                     │ │
+│  │    • frequency — частота сети                                         │ │
+│  │    • unbalance — перекос фаз %                                        │ │
+│  │                                                                        │ │
+│  │  Retention: 30d (raw), 365d (1h aggregates)                           │ │
+│  │  Port: 8086                                                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                        │
+│                                    │ Flux Queries                           │
+│                                    ▼                                        │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                         GRAFANA 10.x                                   │ │
+│  │  ─────────────────────────────────────────────────────────────────────│ │
+│  │  Dashboards:                                                           │ │
+│  │    • Real-time напряжения (Gauge + Time Series)                       │ │
+│  │    • История за день/неделю/месяц                                      │ │
+│  │    • Таблица алертов                                                   │ │
+│  │                                                                        │ │
+│  │  Alerting:                                                             │ │
+│  │    • Phase Loss (U < 50V) → Telegram + Email                          │ │
+│  │    • Over/Under Voltage (±10%) → Telegram                             │ │
+│  │    • Unbalance > 4% → Email                                            │ │
+│  │                                                                        │ │
+│  │  Port: 3000                                                            │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────┬─────────────────────────────┘
+                                                │ HTTP :3000
+                                                ▼
+                                    ┌──────────────────┐
+                                    │     Browser      │
+                                    │  Grafana UI      │
+                                    └──────────────────┘
 ```
+
+### Формат данных (InfluxDB Line Protocol)
+
+ESP32 отправляет данные в формате Line Protocol:
+
+```
+voltage,device=esp32-001,phase=A value=221.5 1703419200000000000
+voltage,device=esp32-001,phase=B value=219.8 1703419200000000000
+voltage,device=esp32-001,phase=C value=223.1 1703419200000000000
+line_voltage,device=esp32-001,phases=AB value=383.5 1703419200000000000
+line_voltage,device=esp32-001,phases=BC value=380.2 1703419200000000000
+line_voltage,device=esp32-001,phases=CA value=386.1 1703419200000000000
+frequency,device=esp32-001 value=50.02 1703419200000000000
+unbalance,device=esp32-001 value=1.23 1703419200000000000
+```
+
+### Grafana Alerting Rules
+
+| Alert | Условие (Flux) | Severity | Уведомление |
+|-------|----------------|----------|-------------|
+| Phase Loss | `voltage < 50` | Critical | Telegram + Email |
+| Under Voltage | `voltage < 198` | Warning | Telegram |
+| Over Voltage | `voltage > 242` | Warning | Telegram |
+| Unbalance | `unbalance > 4.0` | Warning | Email |
+| Frequency Drift | `abs(frequency - 50) > 0.5` | Warning | Email |
 
 ### Схема подключения (Pinout)
 
@@ -171,36 +242,56 @@ $$Unbalance (\%) = \frac{\max(|U_A - U_{avg}|, |U_B - U_{avg}|, |U_C - U_{avg}|)
 
 ## Протокол обмена данными
 
-### WebSocket JSON формат
+### ESP32 → InfluxDB (HTTP POST)
 
-Сервер отправляет JSON каждые **100-1000 мс**:
+**Endpoint:** `POST http://<server>:8086/api/v2/write?org=home&bucket=power_monitoring`
 
-```json
-{
-  "phaseA": { "voltage": 221.5, "status": "ok" },
-  "phaseB": { "voltage": 219.8, "status": "ok" },
-  "phaseC": { "voltage": 223.1, "status": "ok" },
-  "line": { "AB": 383.5, "BC": 380.2, "CA": 386.1 },
-  "frequency": 50.02,
-  "unbalance": 1.23,
-  "alerts": {
-    "phaseLoss": false,
-    "overVoltage": false,
-    "underVoltage": false,
-    "unbalance": false
-  },
-  "timestamp": 1703419200000
-}
+**Headers:**
+```
+Authorization: Token <INFLUXDB_TOKEN>
+Content-Type: text/plain
 ```
 
-### REST API
+**Body (Line Protocol):**
+```
+voltage,device=esp32-001,phase=A value=221.5
+voltage,device=esp32-001,phase=B value=219.8
+voltage,device=esp32-001,phase=C value=223.1
+line_voltage,device=esp32-001,phases=AB value=383.5
+line_voltage,device=esp32-001,phases=BC value=380.2
+line_voltage,device=esp32-001,phases=CA value=386.1
+frequency,device=esp32-001 value=50.02
+unbalance,device=esp32-001 value=1.23
+```
 
-| Endpoint | Метод | Описание |
-|----------|-------|----------|
-| `/` | GET | Веб-интерфейс (HTML) |
-| `/api/status` | GET | Текущие показания (JSON) |
-| `/api/config` | GET/POST | Настройки калибровки |
-| `/ws` | WebSocket | Real-time данные |
+### Flux запросы для Grafana
+
+**Текущее напряжение фазы A:**
+```flux
+from(bucket: "power_monitoring")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "voltage")
+  |> filter(fn: (r) => r.phase == "A")
+  |> last()
+```
+
+**История напряжений за 24 часа:**
+```flux
+from(bucket: "power_monitoring")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r._measurement == "voltage")
+  |> aggregateWindow(every: 1m, fn: mean)
+```
+
+### Типы алертов (Grafana Alerting)
+
+| Код | Название | Условие | Severity | For |
+|-----|----------|---------|----------|-----|
+| `phase_loss` | Обрыв фазы | U < 50V | Critical | 5s |
+| `under_voltage` | Низкое напряжение | U < 198V (-10%) | Warning | 30s |
+| `over_voltage` | Высокое напряжение | U > 242V (+10%) | Warning | 30s |
+| `unbalance` | Перекос фаз | >4% | Warning | 1m |
+| `frequency_drift` | Отклонение частоты | \|f - 50\| > 0.5 Hz | Warning | 1m |
 
 ---
 
@@ -208,60 +299,106 @@ $$Unbalance (\%) = \frac{\max(|U_A - U_{avg}|, |U_B - U_{avg}|, |U_C - U_{avg}|)
 
 ```
 oscillator/
-├── platformio.ini          # Конфигурация PlatformIO
-├── README.md               # Документация (этот файл)
-├── TODO.md                 # План разработки
+├── README.md                   # Документация (этот файл)
+├── TODO.md                     # План разработки
 │
-├── src/
-│   ├── main.cpp            # Точка входа, инициализация
-│   ├── config.h            # Конфигурация (пины, WiFi, пороги)
-│   ├── VoltageSensor.h/cpp # Класс работы с ZMPT101B
-│   └── PowerAnalyzer.h/cpp # Анализ трёхфазной сети
+├── firmware/                   # Прошивка ESP32-S3
+│   ├── platformio.ini          # Конфигурация PlatformIO
+│   └── src/
+│       ├── main.cpp            # Точка входа
+│       ├── config.h            # WiFi, InfluxDB URL, Token, пины
+│       ├── VoltageSensor.h/cpp # Класс работы с ZMPT101B
+│       ├── PowerAnalyzer.h/cpp # Анализ трёхфазной сети
+│       └── InfluxClient.h/cpp  # HTTP клиент для InfluxDB
 │
-└── data/                   # Веб-интерфейс (LittleFS)
-    ├── index.html          # Главная страница
-    ├── style.css           # Стили
-    └── script.js           # WebSocket клиент + Chart.js
+├── docker/                     # Docker конфигурация
+│   ├── docker-compose.yml      # InfluxDB + Grafana
+│   ├── grafana/
+│   │   ├── provisioning/
+│   │   │   ├── datasources/
+│   │   │   │   └── influxdb.yml    # Автонастройка источника
+│   │   │   └── dashboards/
+│   │   │       └── power.yml       # Автоимпорт дашборда
+│   │   └── dashboards/
+│   │       └── power-monitoring.json  # Готовый дашборд
+│   └── influxdb/
+│       └── init.sh             # Создание bucket и token
+│
+└── docs/
+    ├── wiring.md               # Схема подключения
+    └── calibration.md          # Инструкция по калибровке
 ```
 
 ---
 
 ## Быстрый старт
 
-### 1. Клонирование и настройка
+### 1. Запуск сервера (InfluxDB + Grafana)
 
 ```bash
-git clone https://github.com/konsaidin/oscillator.git
-cd oscillator
+cd docker
+docker-compose up -d
 ```
 
-### 2. Конфигурация WiFi
+После запуска:
+- **InfluxDB UI:** http://localhost:8086 (admin / adminadmin)
+- **Grafana:** http://localhost:3000 (admin / admin)
 
-Отредактируйте `src/config.h`:
+### 2. Настройка InfluxDB
+
+1. Открыть http://localhost:8086
+2. Создать Organization: `home`
+3. Создать Bucket: `power_monitoring`
+4. Создать API Token (Full Access) → скопировать
+
+### 3. Прошивка ESP32
+
+```bash
+cd firmware
+```
+
+Отредактировать `src/config.h`:
 
 ```cpp
+// WiFi
 #define WIFI_SSID "YOUR_WIFI_SSID"
 #define WIFI_PASS "YOUR_WIFI_PASSWORD"
-```
 
-### 3. Сборка и загрузка
+// InfluxDB
+#define INFLUXDB_URL "http://192.168.1.100:8086"
+#define INFLUXDB_ORG "home"
+#define INFLUXDB_BUCKET "power_monitoring"
+#define INFLUXDB_TOKEN "YOUR_INFLUXDB_TOKEN"
+
+// Device ID
+#define DEVICE_ID "esp32-001"
+```
 
 ```bash
-# Компиляция прошивки
-pio run
-
-# Загрузка прошивки
+# Сборка и загрузка
 pio run -t upload
 
-# Загрузка веб-интерфейса в LittleFS
-pio run -t uploadfs
+# Мониторинг
+pio device monitor
 ```
 
-### 4. Подключение к устройству
+### 4. Настройка Grafana Dashboard
 
-1. Откройте Serial Monitor (`pio device monitor`)
-2. Найдите IP-адрес устройства в логе
-3. Откройте `http://<IP_ADDRESS>` в браузере
+1. Открыть http://localhost:3000
+2. **Data Sources → Add → InfluxDB**
+   - Query Language: **Flux**
+   - URL: `http://influxdb:8086`
+   - Organization: `home`
+   - Token: `<ваш токен>`
+   - Default Bucket: `power_monitoring`
+3. **Dashboards → Import** → загрузить `docker/grafana/dashboards/power-monitoring.json`
+
+### 5. Настройка алертов в Grafana
+
+1. **Alerting → Contact Points**
+   - Telegram: добавить Bot Token и Chat ID
+   - Email: настроить SMTP
+2. **Alerting → Alert Rules** → создать правила (см. таблицу выше)
 
 ---
 
