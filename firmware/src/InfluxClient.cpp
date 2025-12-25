@@ -44,13 +44,10 @@ SendStatus InfluxClient::send(const String& lineProtocol) {
         return lastStatus;
     }
     
-    // Добавляем timestamp в миллисекундах если не указан
+    // Важно: не добавляем timestamp на стороне ESP32.
+    // Если device time не синхронизирован (NTP), timestamp будет около 1970 года,
+    // и Grafana (Last 5m) ничего не покажет. InfluxDB сам проставит server time.
     String payload = lineProtocol;
-    if (payload.indexOf(' ', payload.lastIndexOf('=')) == -1) {
-        // Нет пробела после последнего значения - нет timestamp
-        payload += " ";
-        payload += String(millis());  // Для precision=ms
-    }
     
     int httpCode = httpPost(payload);
     

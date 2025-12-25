@@ -5,7 +5,7 @@ VoltageSensor::VoltageSensor(int pin, float sensitivity) {
     _sensitivity = sensitivity;
     _offset = ADC_OFFSET;  // Default offset (VCC/2)
     _voltageRMS = 0;
-    _frequency = GRID_FREQUENCY;
+    _frequency = NOMINAL_FREQUENCY;
     _lastCrossingTime = 0;
     _crossingCount = 0;
 }
@@ -106,7 +106,7 @@ float VoltageSensor::readRMS(int samples) {
             
             // Sanity check - frequency should be around 50Hz (40-60Hz range)
             if (_frequency < 40 || _frequency > 60) {
-                _frequency = GRID_FREQUENCY;
+                _frequency = NOMINAL_FREQUENCY;
             }
         }
     }

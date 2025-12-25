@@ -2,6 +2,7 @@ apiVersion: 1
 
 datasources:
   - name: InfluxDB
+    uid: DS_INFLUXDB
     type: influxdb
     access: proxy
     url: http://influxdb:8086

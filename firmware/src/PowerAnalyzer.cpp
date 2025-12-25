@@ -129,58 +129,65 @@ void PowerAnalyzer::checkThresholds(PowerData& data) {
 }
 
 String PowerAnalyzer::toLineProtocol(const char* deviceId) const {
-    // Формат InfluxDB Line Protocol:
-    // measurement,tag=value field=value,field2=value2 timestamp
-    
-    String line = "power_metrics,device=";
-    line += deviceId;
-    line += " ";
-    
+    // Формат InfluxDB Line Protocol (без timestamp — InfluxDB выставит server time):
+    // voltage,device=...,phase=A value=221.5
+    // frequency,device=... value=50.02
+    // unbalance,device=... value=1.23
+    // line_voltage,device=...,phases=AB value=383.5
+
+    String lines;
+
     // Фазные напряжения
-    line += "voltage_a=";
-    line += String(lastData.voltageA, 2);
-    line += ",voltage_b=";
-    line += String(lastData.voltageB, 2);
-    line += ",voltage_c=";
-    line += String(lastData.voltageC, 2);
-    
-    // Среднее напряжение
-    line += ",voltage_avg=";
-    line += String(lastData.voltageAvg, 2);
-    
-    // Частоты
-    line += ",frequency_a=";
-    line += String(lastData.frequencyA, 2);
-    line += ",frequency_b=";
-    line += String(lastData.frequencyB, 2);
-    line += ",frequency_c=";
-    line += String(lastData.frequencyC, 2);
-    line += ",frequency_avg=";
-    line += String(lastData.frequencyAvg, 2);
-    
+    lines += "voltage,device=";
+    lines += deviceId;
+    lines += ",phase=A value=";
+    lines += String(lastData.voltageA, 2);
+    lines += "\n";
+
+    lines += "voltage,device=";
+    lines += deviceId;
+    lines += ",phase=B value=";
+    lines += String(lastData.voltageB, 2);
+    lines += "\n";
+
+    lines += "voltage,device=";
+    lines += deviceId;
+    lines += ",phase=C value=";
+    lines += String(lastData.voltageC, 2);
+    lines += "\n";
+
     // Межфазные напряжения
-    line += ",voltage_ab=";
-    line += String(lastData.voltageAB, 2);
-    line += ",voltage_bc=";
-    line += String(lastData.voltageBC, 2);
-    line += ",voltage_ca=";
-    line += String(lastData.voltageCA, 2);
-    
-    // Перекос фаз
-    line += ",unbalance=";
-    line += String(lastData.unbalance, 2);
-    
-    // Флаги проблем (0 или 1)
-    line += ",low_voltage=";
-    line += lastData.lowVoltage ? "1i" : "0i";
-    line += ",high_voltage=";
-    line += lastData.highVoltage ? "1i" : "0i";
-    line += ",high_unbalance=";
-    line += lastData.highUnbalance ? "1i" : "0i";
-    line += ",freq_deviation=";
-    line += lastData.frequencyDeviation ? "1i" : "0i";
-    
-    return line;
+    lines += "line_voltage,device=";
+    lines += deviceId;
+    lines += ",phases=AB value=";
+    lines += String(lastData.voltageAB, 2);
+    lines += "\n";
+
+    lines += "line_voltage,device=";
+    lines += deviceId;
+    lines += ",phases=BC value=";
+    lines += String(lastData.voltageBC, 2);
+    lines += "\n";
+
+    lines += "line_voltage,device=";
+    lines += deviceId;
+    lines += ",phases=CA value=";
+    lines += String(lastData.voltageCA, 2);
+    lines += "\n";
+
+    // Частота и перекос
+    lines += "frequency,device=";
+    lines += deviceId;
+    lines += " value=";
+    lines += String(lastData.frequencyAvg, 2);
+    lines += "\n";
+
+    lines += "unbalance,device=";
+    lines += deviceId;
+    lines += " value=";
+    lines += String(lastData.unbalance, 2);
+
+    return lines;
 }
 
 bool PowerAnalyzer::hasProblems() const {

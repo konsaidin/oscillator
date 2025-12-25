@@ -13,7 +13,7 @@
 #define INFLUXDB_URL "http://192.168.1.216:8086"
 #define INFLUXDB_ORG "home"
 #define INFLUXDB_BUCKET "power_monitoring"
-#define INFLUXDB_TOKEN "my-super-secret-token"
+#define INFLUXDB_TOKEN "c0EAjvlt2hvtT9V3a54AZi-wzkFDxFHpvORtIR7aW5olE9Z-2_vtBqp-uds3i-bdcXXL1xz4Iz_sPR0NZWslNQ=="
 
 // =============================================================================
 // Device Configuration

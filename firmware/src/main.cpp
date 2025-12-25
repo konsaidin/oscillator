@@ -20,18 +20,30 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <time.h>
 #include "config.h"
 #include "PowerAnalyzer.h"
 #include "InfluxClient.h"
+#include "Oscilloscope.h"
+
+// NTP Configuration
+#define NTP_SERVER "pool.ntp.org"
+#define GMT_OFFSET_SEC 0        // UTC time
+#define DAYLIGHT_OFFSET_SEC 0   // No DST
 
 // Глобальные объекты
 PowerAnalyzer analyzer;
 InfluxClient influxClient;
+Oscilloscope oscilloscope(PIN_PHASE_A, PIN_PHASE_B, PIN_PHASE_C);
 
 // Тайминги
 unsigned long lastMeasurement = 0;
 unsigned long lastWifiCheck = 0;
 unsigned long lastStatusPrint = 0;
+unsigned long lastWaveform = 0;
+
+// Интервал отправки waveform (5 секунд)
+#define WAVEFORM_SEND_INTERVAL_MS 5000
 
 // Счётчики
 unsigned long measurementCount = 0;
@@ -80,6 +92,37 @@ bool connectWiFi() {
 }
 
 /**
+ * Синхронизация времени через NTP
+ */
+bool syncTime() {
+    Serial.println("[NTP] Syncing time...");
+    configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
+    
+    // Ждём синхронизации (максимум 10 секунд)
+    int attempts = 0;
+    time_t now = time(nullptr);
+    while (now < 1700000000 && attempts < 20) {  // 1700000000 = ~2023 год
+        delay(500);
+        Serial.print(".");
+        now = time(nullptr);
+        attempts++;
+    }
+    Serial.println();
+    
+    if (now > 1700000000) {
+        struct tm timeinfo;
+        localtime_r(&now, &timeinfo);
+        Serial.printf("[NTP] Time synced: %04d-%02d-%02d %02d:%02d:%02d UTC\n",
+                      timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                      timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        return true;
+    } else {
+        Serial.println("[NTP] Time sync failed!");
+        return false;
+    }
+}
+
+/**
  * Проверка и переподключение WiFi
  */
 void checkWiFi() {
@@ -89,7 +132,9 @@ void checkWiFi() {
         
         WiFi.disconnect();
         delay(1000);
-        connectWiFi();
+        if (connectWiFi()) {
+            syncTime();  // Пересинхронизируем время после реконнекта
+        }
     }
 }
 
@@ -171,6 +216,12 @@ void setup() {
         ESP.restart();
     }
     
+    // Синхронизация времени через NTP
+    if (!syncTime()) {
+        Serial.println("[WARNING] Time sync failed, timestamps may be incorrect!");
+        // Продолжаем работу, но данные могут не записаться в InfluxDB
+    }
+    
     // Быстрая проверка доступности InfluxDB
     influxClient.begin(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
     
@@ -187,6 +238,10 @@ void setup() {
     // Инициализация анализатора напряжения
     Serial.println();
     analyzer.begin();
+    
+    // Инициализация осциллографа
+    oscilloscope.begin();
+    Serial.println("[Oscilloscope] Initialized");
     
     Serial.println();
     Serial.println("[READY] Starting measurements...");
@@ -252,6 +307,29 @@ void loop() {
                          analyzer.getProblemsDescription().c_str(),
                          data.voltageA, data.voltageB, data.voltageC,
                          data.unbalance, data.frequencyAvg);
+        }
+    }
+    
+    // Отправка waveform для осциллографа (раз в 5 секунд)
+    if (currentTime - lastWaveform >= WAVEFORM_SEND_INTERVAL_MS) {
+        lastWaveform = currentTime;
+        
+        // Захватываем waveform (~20ms блокировка)
+        oscilloscope.capture();
+        
+        // Получаем offset'ы от анализатора для центрирования
+        // Используем ADC_OFFSET как приближение
+        String waveformData = oscilloscope.toLineProtocol(
+            DEVICE_ID, 
+            ADC_OFFSET, ADC_OFFSET, ADC_OFFSET
+        );
+        
+        // Отправляем в InfluxDB
+        SendStatus wfStatus = influxClient.send(waveformData);
+        if (wfStatus == SendStatus::SUCCESS) {
+            Serial.println("[Oscilloscope] Waveform sent");
+        } else {
+            Serial.println("[Oscilloscope] Waveform send failed");
         }
     }
     
