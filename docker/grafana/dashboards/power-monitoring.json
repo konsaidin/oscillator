@@ -231,7 +231,12 @@
           "color": { "mode": "palette-classic" },
           "mappings": [],
           "unit": "volt"
-        }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "AB" }, "properties": [{ "id": "displayName", "value": "AB" }, { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "BC" }, "properties": [{ "id": "displayName", "value": "BC" }, { "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "CA" }, "properties": [{ "id": "displayName", "value": "CA" }, { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] }
+        ]
       },
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 8 },
       "id": 6,
@@ -247,8 +252,18 @@
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "DS_INFLUXDB" },
-          "query": "from(bucket: \"power_monitoring\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"line_voltage\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> last()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"phases\"], valueColumn: \"_value\")",
+          "query": "from(bucket: \"power_monitoring\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"line_voltage\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> filter(fn: (r) => r.phases == \"AB\")\n  |> last()\n  |> keep(columns: [\"_value\"])\n  |> rename(columns: {_value: \"AB\"})",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "DS_INFLUXDB" },
+          "query": "from(bucket: \"power_monitoring\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"line_voltage\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> filter(fn: (r) => r.phases == \"BC\")\n  |> last()\n  |> keep(columns: [\"_value\"])\n  |> rename(columns: {_value: \"BC\"})",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "influxdb", "uid": "DS_INFLUXDB" },
+          "query": "from(bucket: \"power_monitoring\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"line_voltage\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> filter(fn: (r) => r.phases == \"CA\")\n  |> last()\n  |> keep(columns: [\"_value\"])\n  |> rename(columns: {_value: \"CA\"})",
+          "refId": "C"
         }
       ],
       "title": "Междуфазные напряжения",
@@ -270,10 +285,10 @@
             "axisBorderShow": false,
             "axisCenteredZero": true,
             "axisColorMode": "text",
-            "axisLabel": "Значение ADC",
+            "axisLabel": "ADC",
             "axisPlacement": "auto",
             "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "pointSize": { "fixed": 3 },
+            "pointSize": { "fixed": 4 },
             "scaleDistribution": { "type": "linear" },
             "show": "points+lines"
           },
@@ -289,24 +304,16 @@
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
       "id": 10,
       "options": {
-        "dims": {
-          "x": "idx",
-          "exclude": ["idx"]
-        },
+        "dims": { "x": "idx" },
         "legend": { "calcs": [], "displayMode": "list", "placement": "right", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" },
-        "seriesMapping": "manual",
-        "series": [
-          { "x": "idx", "y": "Phase A", "name": "Phase A" },
-          { "x": "idx", "y": "Phase B", "name": "Phase B" },
-          { "x": "idx", "y": "Phase C", "name": "Phase C" }
-        ]
+        "seriesMapping": "auto",
+        "tooltip": { "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "10.2.0",
       "targets": [
         {
           "datasource": { "type": "influxdb", "uid": "DS_INFLUXDB" },
-          "query": "import \"experimental\"\n\nfrom(bucket: \"power_monitoring\")\n  |> range(start: -10s)\n  |> filter(fn: (r) => r._measurement == \"waveform\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> last()\n  |> group()\n  |> map(fn: (r) => ({ idx: int(v: r.idx), phase: r.phase, value: r._value }))\n  |> pivot(rowKey: [\"idx\"], columnKey: [\"phase\"], valueColumn: \"value\")\n  |> rename(columns: {A: \"Phase A\", B: \"Phase B\", C: \"Phase C\"})\n  |> sort(columns: [\"idx\"])",
+          "query": "from(bucket: \"power_monitoring\")\n  |> range(start: -15s)\n  |> filter(fn: (r) => r._measurement == \"waveform\")\n  |> filter(fn: (r) => r.device == \"${device}\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> group(columns: [\"phase\", \"idx\"])\n  |> last()\n  |> group()\n  |> map(fn: (r) => ({idx: int(v: r.idx), phase: r.phase, value: r._value}))\n  |> pivot(rowKey: [\"idx\"], columnKey: [\"phase\"], valueColumn: \"value\")\n  |> map(fn: (r) => ({idx: r.idx, \"Phase A\": r.A, \"Phase B\": r.B, \"Phase C\": r.C}))\n  |> sort(columns: [\"idx\"])",
           "refId": "A"
         }
       ],

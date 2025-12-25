@@ -42,11 +42,11 @@ const WaveformData& Oscilloscope::getData() const {
 
 String Oscilloscope::toLineProtocol(const char* deviceId, float offsetA, float offsetB, float offsetC) const {
     // Формат: waveform,device=xxx,phase=A,idx=0 value=123.45
-    // Используем idx как тег для порядка точек, без timestamp (InfluxDB назначит сам)
-    // Grafana будет группировать по idx для отображения синусоиды
+    // idx как TAG для уникальности записи в InfluxDB
+    // Без timestamp - InfluxDB назначит сам
     
     String lines;
-    lines.reserve(WAVEFORM_SAMPLES * 3 * 60);
+    lines.reserve(WAVEFORM_SAMPLES * 3 * 70);
     
     for (int i = 0; i < (int)_data.sampleCount; i++) {
         // Нормализуем значения относительно offset (центрируем около 0)
@@ -54,7 +54,7 @@ String Oscilloscope::toLineProtocol(const char* deviceId, float offsetA, float o
         float valB = (_data.phaseB[i] - offsetB);
         float valC = (_data.phaseC[i] - offsetC);
         
-        // Phase A - idx как тег, без timestamp
+        // Phase A - idx как TAG
         lines += "waveform,device=";
         lines += deviceId;
         lines += ",phase=A,idx=";
