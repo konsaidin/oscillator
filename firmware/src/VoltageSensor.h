@@ -17,6 +17,11 @@ private:
     float _voltageRMS;
     float _frequency;
     
+    // Frequency averaging (sliding window)
+    static const int FREQ_AVG_SIZE = 8;
+    float _freqHistory[FREQ_AVG_SIZE];
+    int _freqHistoryIdx;
+    
     // ADC diagnostics
     int _lastMinAdc;
     int _lastMaxAdc;

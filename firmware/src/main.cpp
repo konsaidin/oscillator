@@ -42,8 +42,8 @@ unsigned long lastWifiCheck = 0;
 unsigned long lastStatusPrint = 0;
 unsigned long lastWaveform = 0;
 
-// Интервал отправки waveform (5 секунд)
-#define WAVEFORM_SEND_INTERVAL_MS 5000
+// Интервал отправки waveform (2 секунды)
+#define WAVEFORM_SEND_INTERVAL_MS 2000
 
 // Счётчики
 unsigned long measurementCount = 0;

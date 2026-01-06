@@ -5,8 +5,8 @@
 #include "config.h"
 
 // Параметры захвата waveform
-#define WAVEFORM_SAMPLES 100      // Точек на фазу (2-3 периода при 50Hz)
-#define WAVEFORM_INTERVAL_US 200  // Интервал между отсчётами (200us = 5kHz)
+#define WAVEFORM_SAMPLES 200      // Точек на фазу (5 периодов при 50Hz @ 20kHz)
+#define WAVEFORM_INTERVAL_US 100  // Интервал между отсчётами (100us = 10kHz)
 
 /**
  * Структура для хранения waveform данных трёх фаз

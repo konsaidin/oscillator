@@ -54,8 +54,8 @@
 // =============================================================================
 // Sampling Configuration
 // =============================================================================
-#define SAMPLES_PER_READING 2000    // Number of ADC samples for one RMS calculation
-#define SAMPLE_INTERVAL_US 100      // Microseconds between samples (10kHz = 100us)
+#define SAMPLES_PER_READING 4000    // Number of ADC samples for one RMS calculation (4 periods at 50Hz)
+#define SAMPLE_INTERVAL_US 50       // Microseconds between samples (20kHz = 50us)
 #define READINGS_PER_SECOND 1       // How often to calculate and send data
 
 // =============================================================================

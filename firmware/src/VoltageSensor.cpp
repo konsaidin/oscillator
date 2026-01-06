@@ -12,6 +12,10 @@ VoltageSensor::VoltageSensor(int pin, float sensitivity) {
     _crossingCount = 0;
     _lastMinAdc = 4095;
     _lastMaxAdc = 0;
+    _freqHistoryIdx = 0;
+    for (int i = 0; i < FREQ_AVG_SIZE; i++) {
+        _freqHistory[i] = NOMINAL_FREQUENCY;
+    }
 }
 
 void VoltageSensor::begin() {
@@ -130,11 +134,20 @@ float VoltageSensor::readRMS(int samples) {
         float timePeriod = (lastCrossingTime - firstCrossingTime) / 1000000.0; // Convert to seconds
         int fullCycles = (zeroCrossings - 1) / 2;
         if (fullCycles > 0) {
-            _frequency = fullCycles / timePeriod;
+            float rawFreq = fullCycles / timePeriod;
             
-            // Sanity check - frequency should be around 50Hz (40-60Hz range)
-            if (_frequency < 40 || _frequency > 60) {
-                _frequency = NOMINAL_FREQUENCY;
+            // Sanity check - frequency should be around 50Hz (45-55Hz range)
+            if (rawFreq >= 45.0f && rawFreq <= 55.0f) {
+                // Add to averaging buffer
+                _freqHistory[_freqHistoryIdx] = rawFreq;
+                _freqHistoryIdx = (_freqHistoryIdx + 1) % FREQ_AVG_SIZE;
+                
+                // Calculate average
+                float sum = 0;
+                for (int i = 0; i < FREQ_AVG_SIZE; i++) {
+                    sum += _freqHistory[i];
+                }
+                _frequency = sum / FREQ_AVG_SIZE;
             }
         }
     }
