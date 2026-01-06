@@ -13,8 +13,13 @@ private:
     int _pin;
     float _sensitivity;
     float _offset;
+    float _noiseRmsAdc;
     float _voltageRMS;
     float _frequency;
+    
+    // ADC diagnostics
+    int _lastMinAdc;
+    int _lastMaxAdc;
     
     // Zero-crossing detection
     unsigned long _lastCrossingTime;
@@ -76,4 +81,9 @@ public:
      * Get the calibrated offset value
      */
     float getOffset() const;
+    
+    /**
+     * Get last measurement ADC min/max for diagnostics
+     */
+    void getAdcRange(int& minAdc, int& maxAdc) const;
 };

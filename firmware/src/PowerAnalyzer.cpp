@@ -91,6 +91,18 @@ PowerData PowerAnalyzer::getLastData() const {
     return lastData;
 }
 
+void PowerAnalyzer::getOffsets(float& offsetA, float& offsetB, float& offsetC) const {
+    offsetA = sensorA.getOffset();
+    offsetB = sensorB.getOffset();
+    offsetC = sensorC.getOffset();
+}
+
+void PowerAnalyzer::getAdcRanges(int& minA, int& maxA, int& minB, int& maxB, int& minC, int& maxC) const {
+    sensorA.getAdcRange(minA, maxA);
+    sensorB.getAdcRange(minB, maxB);
+    sensorC.getAdcRange(minC, maxC);
+}
+
 float PowerAnalyzer::calculateUnbalance(float ua, float ub, float uc) {
     // Коэффициент несимметрии напряжений по обратной последовательности
     // Упрощённый расчёт по ГОСТ 13109-97:

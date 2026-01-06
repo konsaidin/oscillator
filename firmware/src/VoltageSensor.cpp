@@ -1,13 +1,17 @@
 #include "VoltageSensor.h"
+#include <cmath>
 
 VoltageSensor::VoltageSensor(int pin, float sensitivity) {
     _pin = pin;
     _sensitivity = sensitivity;
     _offset = ADC_OFFSET;  // Default offset (VCC/2)
+    _noiseRmsAdc = 0.0f;
     _voltageRMS = 0;
     _frequency = NOMINAL_FREQUENCY;
     _lastCrossingTime = 0;
     _crossingCount = 0;
+    _lastMinAdc = 4095;
+    _lastMaxAdc = 0;
 }
 
 void VoltageSensor::begin() {
@@ -27,17 +31,26 @@ void VoltageSensor::calibrateOffset() {
     // This should ideally be done with no AC signal, but works reasonably
     // well with AC too as we're averaging over many cycles
     
-    long sum = 0;
     const int calibrationSamples = 5000;
-    
+
+    // Welford online algorithm for mean + variance
+    double mean = 0.0;
+    double m2 = 0.0;
     for (int i = 0; i < calibrationSamples; i++) {
-        sum += analogRead(_pin);
+        double x = (double)analogRead(_pin);
+        double delta = x - mean;
+        mean += delta / (double)(i + 1);
+        double delta2 = x - mean;
+        m2 += delta * delta2;
         delayMicroseconds(50);
     }
-    
-    _offset = (float)sum / calibrationSamples;
-    
-    Serial.printf("[VoltageSensor] Pin %d offset calibrated: %.1f\n", _pin, _offset);
+
+    _offset = (float)mean;
+    double variance = (calibrationSamples > 1) ? (m2 / (double)(calibrationSamples - 1)) : 0.0;
+    _noiseRmsAdc = (float)sqrt(variance);
+
+    Serial.printf("[VoltageSensor] Pin %d offset calibrated: %.1f (noise RMS: %.2f ADC)\n",
+                  _pin, _offset, _noiseRmsAdc);
 }
 
 void VoltageSensor::setSensitivity(float sensitivity) {
@@ -49,7 +62,7 @@ float VoltageSensor::getSensitivity() const {
 }
 
 float VoltageSensor::readRMS(int samples) {
-    long sumSquares = 0;
+    uint64_t sumSquares = 0;
     int lastValue = analogRead(_pin);
     bool wasAboveZero = lastValue > _offset;
     
@@ -58,12 +71,20 @@ float VoltageSensor::readRMS(int samples) {
     unsigned long firstCrossingTime = 0;
     unsigned long lastCrossingTime = 0;
     
+    // Reset ADC range tracking
+    int minAdc = 4095;
+    int maxAdc = 0;
+    
     for (int i = 0; i < samples; i++) {
         int raw = analogRead(_pin);
         
+        // Track min/max for diagnostics
+        if (raw < minAdc) minAdc = raw;
+        if (raw > maxAdc) maxAdc = raw;
+        
         // Calculate deviation from offset
-        float value = raw - _offset;
-        sumSquares += (long)(value * value);
+        int32_t deviation = (int32_t)raw - (int32_t)lroundf(_offset);
+        sumSquares += (uint64_t)((int64_t)deviation * (int64_t)deviation);
         
         // Zero-crossing detection for frequency measurement
         bool isAboveZero = raw > _offset;
@@ -84,15 +105,22 @@ float VoltageSensor::readRMS(int samples) {
         }
     }
     
+    // Save ADC range for diagnostics
+    _lastMinAdc = minAdc;
+    _lastMaxAdc = maxAdc;
+    
     // Calculate RMS from ADC values
-    float meanSquare = (float)sumSquares / samples;
-    float rmsADC = sqrt(meanSquare);
+    double meanSquare = (samples > 0) ? ((double)sumSquares / (double)samples) : 0.0;
+    float rmsADC = (float)sqrt(meanSquare);
     
     // Convert ADC RMS to voltage using calibration coefficient
     _voltageRMS = rmsADC * _sensitivity;
+
+    // Noise gate disabled - rely only on simple voltage threshold
+    // (was causing issues when calibration happened with AC present)
     
-    // Filter out noise (anything below 5V is probably noise)
-    if (_voltageRMS < 5.0) {
+    // Filter out noise (anything below 2V is probably noise)
+    if (_voltageRMS < 2.0) {
         _voltageRMS = 0.0;
     }
     
@@ -128,4 +156,9 @@ int VoltageSensor::readRaw() {
 
 float VoltageSensor::getOffset() const {
     return _offset;
+}
+
+void VoltageSensor::getAdcRange(int& minAdc, int& maxAdc) const {
+    minAdc = _lastMinAdc;
+    maxAdc = _lastMaxAdc;
 }

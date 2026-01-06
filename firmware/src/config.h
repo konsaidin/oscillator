@@ -36,9 +36,9 @@
 // Formula: V_actual = ADC_RMS * CALIBRATION_COEFF
 // Adjust these values after calibration with a multimeter
 // =============================================================================
-#define CALIBRATION_COEFF_A 0.23    // Calibration coefficient for Phase A
-#define CALIBRATION_COEFF_B 0.23    // Calibration coefficient for Phase B
-#define CALIBRATION_COEFF_C 0.23    // Calibration coefficient for Phase C
+#define CALIBRATION_COEFF_A 0.915   // Calibration coefficient for Phase A
+#define CALIBRATION_COEFF_B 0.915   // Calibration coefficient for Phase B
+#define CALIBRATION_COEFF_C 0.915   // Calibration coefficient for Phase C
 
 // =============================================================================
 // Grid Parameters
@@ -69,5 +69,5 @@
 // =============================================================================
 // Timing Configuration
 // =============================================================================
-#define SEND_INTERVAL_MS 1000       // How often to send data (1 second)
+#define SEND_INTERVAL_MS 500       // How often to send data (1 second)
 #define HTTP_TIMEOUT_MS 5000        // HTTP request timeout

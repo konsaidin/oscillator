@@ -15,7 +15,7 @@
  * Аппаратное обеспечение:
  * - ESP32-S3-DevKitC-1
  * - 3x ZMPT101B (GPIO 1, 2, 3)
- * - Встроенный RGB LED (GPIO 48) или внешний LED (GPIO 2)
+ * - Встроенный RGB LED (GPIO 48)
  */
 
 #include <Arduino.h>
@@ -51,7 +51,7 @@ unsigned long wifiReconnects = 0;
 
 // LED пин для индикации (встроенный на ESP32-S3-DevKitC-1)
 #ifndef LED_BUILTIN
-#define LED_BUILTIN 48  // RGB LED на ESP32-S3-DevKitC-1 (или 2 для обычного LED)
+#define LED_BUILTIN 48  // RGB LED на ESP32-S3-DevKitC-1
 #endif
 
 /**
@@ -181,6 +181,22 @@ void printStatus(const PowerData& data) {
     } else {
         Serial.println("✓ All parameters OK");
     }
+    
+    // ADC Diagnostics - показывает реальный диапазон ADC для проверки клиппинга
+    Serial.println();
+    Serial.println("[ADC DIAGNOSTICS]");
+    float offA, offB, offC;
+    analyzer.getOffsets(offA, offB, offC);
+    int minA, maxA, minB, maxB, minC, maxC;
+    analyzer.getAdcRanges(minA, maxA, minB, maxB, minC, maxC);
+    Serial.printf("  Phase A: offset=%.0f, ADC range=[%d - %d], swing=%d\n", offA, minA, maxA, maxA - minA);
+    Serial.printf("  Phase B: offset=%.0f, ADC range=[%d - %d], swing=%d\n", offB, minB, maxB, maxB - minB);
+    Serial.printf("  Phase C: offset=%.0f, ADC range=[%d - %d], swing=%d\n", offC, minC, maxC, maxC - minC);
+    
+    // Проверка на клиппинг
+    if (minA < 50 || maxA > 4045) Serial.println("  ⚠️  Phase A: possible CLIPPING!");
+    if (minB < 50 || maxB > 4045) Serial.println("  ⚠️  Phase B: possible CLIPPING!");
+    if (minC < 50 || maxC > 4045) Serial.println("  ⚠️  Phase C: possible CLIPPING!");
     
     Serial.println();
     Serial.printf("InfluxDB: sent=%lu, failed=%lu\n", 
@@ -318,10 +334,19 @@ void loop() {
         oscilloscope.capture();
         
         // Получаем offset'ы от анализатора для центрирования
-        // Используем ADC_OFFSET как приближение
+        float offsetA = ADC_OFFSET;
+        float offsetB = ADC_OFFSET;
+        float offsetC = ADC_OFFSET;
+        analyzer.getOffsets(offsetA, offsetB, offsetC);
+
+        // sanity check (на случай, если калибровка ещё не прошла или вход "висит")
+        if (offsetA < 0 || offsetA > ADC_MAX_VALUE) offsetA = ADC_OFFSET;
+        if (offsetB < 0 || offsetB > ADC_MAX_VALUE) offsetB = ADC_OFFSET;
+        if (offsetC < 0 || offsetC > ADC_MAX_VALUE) offsetC = ADC_OFFSET;
+
         String waveformData = oscilloscope.toLineProtocol(
             DEVICE_ID, 
-            ADC_OFFSET, ADC_OFFSET, ADC_OFFSET
+            offsetA, offsetB, offsetC
         );
         
         // Отправляем в InfluxDB

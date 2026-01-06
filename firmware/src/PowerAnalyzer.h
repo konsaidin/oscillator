@@ -69,6 +69,16 @@ public:
      * Получить последние измеренные данные без нового измерения
      */
     PowerData getLastData() const;
+
+    /**
+     * Получить откалиброванные смещения (DC offset) для каждой фазы (в отсчётах ADC)
+     */
+    void getOffsets(float& offsetA, float& offsetB, float& offsetC) const;
+    
+    /**
+     * Получить диагностику ADC (min/max) для каждой фазы
+     */
+    void getAdcRanges(int& minA, int& maxA, int& minB, int& maxB, int& minC, int& maxC) const;
     
     /**
      * Форматировать данные в InfluxDB Line Protocol
