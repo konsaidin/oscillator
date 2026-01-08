@@ -10,10 +10,10 @@
 // =============================================================================
 // InfluxDB Configuration
 // =============================================================================
-#define INFLUXDB_URL "http://192.168.1.216:8086"
+#define INFLUXDB_URL "http://45.148.28.29:8086"
 #define INFLUXDB_ORG "home"
 #define INFLUXDB_BUCKET "power_monitoring"
-#define INFLUXDB_TOKEN "c0EAjvlt2hvtT9V3a54AZi-wzkFDxFHpvORtIR7aW5olE9Z-2_vtBqp-uds3i-bdcXXL1xz4Iz_sPR0NZWslNQ=="
+#define INFLUXDB_TOKEN "CzPwmGcLvkCHNwZMol1Mh7ciPhYABSLqHTNT7CaNloACfFjudqxPTZZos_ysibOywAgvBbAl6rRdUYK-AnIuaA=="
 
 // =============================================================================
 // Device Configuration
@@ -47,7 +47,7 @@
 #define NOMINAL_VOLTAGE 220.0f      // Nominal phase voltage
 #define VOLTAGE_MIN 198.0f          // -10% threshold
 #define VOLTAGE_MAX 242.0f          // +10% threshold
-#define PHASE_LOSS_THRESHOLD 50.0f  // Voltage below this = phase loss
+#define PHASE_LOSS_THRESHOLD 100.0f // Voltage below this = phase loss (increased for noise immunity)
 #define UNBALANCE_THRESHOLD 4.0f    // Max allowed unbalance %
 #define FREQUENCY_DEVIATION_THRESHOLD 0.4f  // Max freq deviation from nominal
 
@@ -71,3 +71,10 @@
 // =============================================================================
 #define SEND_INTERVAL_MS 500       // How often to send data (1 second)
 #define HTTP_TIMEOUT_MS 5000        // HTTP request timeout
+
+// =============================================================================
+// Web Configuration Portal
+// =============================================================================
+#define AP_SSID "PowerMonitor-Setup"    // AP mode SSID for configuration
+#define AP_PASSWORD "12345678"          // AP password (min 8 chars)
+#define WEB_SERVER_PORT 80              // Web server port

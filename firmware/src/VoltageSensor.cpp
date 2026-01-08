@@ -120,28 +120,55 @@ float VoltageSensor::readRMS(int samples) {
     // Convert ADC RMS to voltage using calibration coefficient
     _voltageRMS = rmsADC * _sensitivity;
 
-    // Noise gate disabled - rely only on simple voltage threshold
-    // (was causing issues when calibration happened with AC present)
+    // Умный noise gate на основе нескольких критериев:
+    // 1. Размах сигнала (swing) должен быть достаточным для реального синуса
+    //    Для 220V RMS: peak = 220 * 1.414 = 311V, swing = 622V
+    //    В ADC единицах при K=0.915: swing_adc = 622 / 0.915 ≈ 680 ADC
+    //    Минимальный порог ~50V RMS → swing_adc ≈ 150 ADC
+    // 2. RMS должен быть выше порога на основе калиброванного шума
+    // 3. Абсолютный минимум 10V (ниже — точно шум)
     
-    // Filter out noise (anything below 2V is probably noise)
-    if (_voltageRMS < 2.0) {
+    int swing = maxAdc - minAdc;
+    float noiseThresholdV = _noiseRmsAdc * _sensitivity * 6.0f;  // 6 sigma от шума
+    
+    bool isNoise = false;
+    
+    // Критерий 1: слишком маленький размах — это не синус от сети
+    if (swing < 100) {
+        isNoise = true;
+    }
+    
+    // Критерий 2: RMS меньше 6 сигм от калиброванного шума
+    if (_voltageRMS < noiseThresholdV) {
+        isNoise = true;
+    }
+    
+    // Критерий 3: абсолютный минимум (50V — минимальное реальное напряжение)
+    if (_voltageRMS < PHASE_LOSS_THRESHOLD) {
+        isNoise = true;
+    }
+    
+    if (isNoise) {
         _voltageRMS = 0.0;
     }
     
     // Calculate frequency from zero crossings
-    // Each full cycle has 2 zero crossings
+    // We count zero crossings (both rising and falling). There are (zeroCrossings - 1)
+    // intervals between crossings, each interval is half a cycle. Therefore
+    // freq = (zeroCrossings - 1) / (2 * timePeriod)
     if (zeroCrossings >= 4 && lastCrossingTime > firstCrossingTime) {
-        float timePeriod = (lastCrossingTime - firstCrossingTime) / 1000000.0; // Convert to seconds
-        int fullCycles = (zeroCrossings - 1) / 2;
-        if (fullCycles > 0) {
-            float rawFreq = fullCycles / timePeriod;
-            
-            // Sanity check - frequency should be around 50Hz (45-55Hz range)
-            if (rawFreq >= 45.0f && rawFreq <= 55.0f) {
+        double timePeriod = (lastCrossingTime - firstCrossingTime) / 1000000.0; // seconds
+        double halfIntervals = (double)(zeroCrossings - 1); // number of half-cycle intervals
+
+        if (timePeriod > 0.0 && halfIntervals > 0.0) {
+            double rawFreq = halfIntervals / (2.0 * timePeriod);
+
+            // Sanity check - accept reasonable grid frequency range (adjustable)
+            if (rawFreq >= 45.0 && rawFreq <= 55.0) {
                 // Add to averaging buffer
-                _freqHistory[_freqHistoryIdx] = rawFreq;
+                _freqHistory[_freqHistoryIdx] = (float)rawFreq;
                 _freqHistoryIdx = (_freqHistoryIdx + 1) % FREQ_AVG_SIZE;
-                
+
                 // Calculate average
                 float sum = 0;
                 for (int i = 0; i < FREQ_AVG_SIZE; i++) {

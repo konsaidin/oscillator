@@ -25,6 +25,7 @@
 #include "PowerAnalyzer.h"
 #include "InfluxClient.h"
 #include "Oscilloscope.h"
+#include "WebConfig.h"
 
 // NTP Configuration
 #define NTP_SERVER "pool.ntp.org"
@@ -49,10 +50,32 @@ unsigned long lastWaveform = 0;
 unsigned long measurementCount = 0;
 unsigned long wifiReconnects = 0;
 
+// Последние измерения для веб-интерфейса
+PowerData lastPowerData;
+
 // LED пин для индикации (встроенный на ESP32-S3-DevKitC-1)
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 48  // RGB LED на ESP32-S3-DevKitC-1
 #endif
+
+// WiFi события для автопереподключения
+void WiFiEvent(WiFiEvent_t event) {
+    switch (event) {
+        case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+            Serial.println("[WiFi] Disconnected, will auto-reconnect...");
+            wifiReconnects++;
+            // ESP32 автоматически переподключается если setAutoReconnect(true)
+            break;
+        case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+            Serial.println("[WiFi] Connected to AP");
+            break;
+        case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+            Serial.printf("[WiFi] Got IP: %s\n", WiFi.localIP().toString().c_str());
+            break;
+        default:
+            break;
+    }
+}
 
 /**
  * Подключение к WiFi с таймаутом
@@ -225,12 +248,27 @@ void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
     
-    // Подключение к WiFi
-    if (!connectWiFi()) {
-        Serial.println("[ERROR] WiFi connection failed. Restarting in 10 seconds...");
-        delay(10000);
-        ESP.restart();
+    // ВАЖНО: Сначала инициализируем WiFi стек
+    WiFi.mode(WIFI_STA);
+    WiFi.onEvent(WiFiEvent);  // Регистрируем обработчик событий WiFi
+    delay(100);  // Даём время на инициализацию lwIP стека
+    
+    // Загружаем конфигурацию (без запуска HTTP сервера)
+    webConfig.loadConfig();
+    
+    // Попытка подключения к сохранённому WiFi
+    if (!webConfig.connectToSavedWiFi()) {
+        // Если не удалось подключиться, запускаем AP режим для конфигурации
+        Serial.println("[WiFi] Starting AP mode for configuration...");
+        webConfig.startAPMode();
+        
+        // Ждём подключения пользователя (но не блокируем)
+        Serial.printf("[WiFi] Connect to '%s' and open http://%s\n", 
+                      AP_SSID, webConfig.getIPAddress().c_str());
     }
+    
+    // Теперь запускаем веб-сервер (WiFi уже инициализирован)
+    webConfig.begin();
     
     // Синхронизация времени через NTP
     if (!syncTime()) {
@@ -238,8 +276,13 @@ void setup() {
         // Продолжаем работу, но данные могут не записаться в InfluxDB
     }
     
-    // Быстрая проверка доступности InfluxDB
-    influxClient.begin(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
+    // Быстрая проверка доступности InfluxDB (используем настройки из WebConfig)
+    influxClient.begin(
+        webConfig.getInfluxURL().c_str(), 
+        webConfig.getInfluxOrg().c_str(), 
+        webConfig.getInfluxBucket().c_str(), 
+        webConfig.getInfluxToken().c_str()
+    );
     
     Serial.println("[InfluxDB] Checking connection...");
     if (influxClient.ping()) {
@@ -275,10 +318,20 @@ void setup() {
 void loop() {
     unsigned long currentTime = millis();
     
-    // Периодическая проверка WiFi (каждые 30 секунд)
-    if (currentTime - lastWifiCheck >= 30000) {
+    // Обработка веб-запросов
+    webConfig.handle();
+    
+    // Периодическая проверка WiFi (каждые 60 секунд)
+    // WiFi автоматически переподключается, но проверяем для лога
+    if (currentTime - lastWifiCheck >= 60000) {
         lastWifiCheck = currentTime;
-        checkWiFi();
+        if (!webConfig.isAPMode()) {
+            if (webConfig.isConnected()) {
+                Serial.printf("[WiFi] Status: Connected, RSSI: %d dBm\n", WiFi.RSSI());
+            } else {
+                Serial.println("[WiFi] Status: Disconnected (auto-reconnecting...)");
+            }
+        }
     }
     
     // Основной цикл измерений
@@ -291,9 +344,10 @@ void loop() {
         
         // Измерение
         PowerData data = analyzer.measure();
+        lastPowerData = data;  // Сохраняем для веб-интерфейса
         
         // Формирование и отправка данных
-        String lineProtocol = analyzer.toLineProtocol(DEVICE_ID);
+        String lineProtocol = analyzer.toLineProtocol(webConfig.getDeviceID().c_str());
         
         SendStatus status = influxClient.send(lineProtocol);
         
