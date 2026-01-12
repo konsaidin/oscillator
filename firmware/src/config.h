@@ -3,8 +3,8 @@
 // =============================================================================
 // WiFi Configuration
 // =============================================================================
-#define WIFI_SSID "Labofix2"
-#define WIFI_PASSWORD "labofix123"
+#define WIFI_SSID "office-wlan"
+#define WIFI_PASSWORD "KardokGDA22"
 #define WIFI_CONNECT_TIMEOUT_SEC 30
 
 // =============================================================================
@@ -47,7 +47,7 @@
 #define NOMINAL_VOLTAGE 220.0f      // Nominal phase voltage
 #define VOLTAGE_MIN 198.0f          // -10% threshold
 #define VOLTAGE_MAX 242.0f          // +10% threshold
-#define PHASE_LOSS_THRESHOLD 100.0f // Voltage below this = phase loss (increased for noise immunity)
+#define PHASE_LOSS_THRESHOLD 50.0f  // Voltage below this = phase loss
 #define UNBALANCE_THRESHOLD 4.0f    // Max allowed unbalance %
 #define FREQUENCY_DEVIATION_THRESHOLD 0.4f  // Max freq deviation from nominal
 

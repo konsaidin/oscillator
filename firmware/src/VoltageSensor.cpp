@@ -117,38 +117,22 @@ float VoltageSensor::readRMS(int samples) {
     double meanSquare = (samples > 0) ? ((double)sumSquares / (double)samples) : 0.0;
     float rmsADC = (float)sqrt(meanSquare);
     
-    // Convert ADC RMS to voltage using calibration coefficient
-    _voltageRMS = rmsADC * _sensitivity;
-
-    // Умный noise gate на основе нескольких критериев:
-    // 1. Размах сигнала (swing) должен быть достаточным для реального синуса
-    //    Для 220V RMS: peak = 220 * 1.414 = 311V, swing = 622V
-    //    В ADC единицах при K=0.915: swing_adc = 622 / 0.915 ≈ 680 ADC
-    //    Минимальный порог ~50V RMS → swing_adc ≈ 150 ADC
-    // 2. RMS должен быть выше порога на основе калиброванного шума
-    // 3. Абсолютный минимум 10V (ниже — точно шум)
+    // Dynamic noise gate based on calibrated noise level
+    // If RMS is less than 6x the calibrated noise, consider it noise
+    // This filters out random fluctuations while allowing real signals through
+    float noiseThresholdAdc = _noiseRmsAdc * 6.0f;
+    if (noiseThresholdAdc < 10.0f) noiseThresholdAdc = 10.0f;  // Minimum threshold
     
-    int swing = maxAdc - minAdc;
-    float noiseThresholdV = _noiseRmsAdc * _sensitivity * 6.0f;  // 6 sigma от шума
-    
-    bool isNoise = false;
-    
-    // Критерий 1: слишком маленький размах — это не синус от сети
-    if (swing < 100) {
-        isNoise = true;
+    if (rmsADC < noiseThresholdAdc) {
+        _voltageRMS = 0.0;
+    } else {
+        // Convert ADC RMS to voltage using calibration coefficient
+        _voltageRMS = rmsADC * _sensitivity;
     }
     
-    // Критерий 2: RMS меньше 6 сигм от калиброванного шума
-    if (_voltageRMS < noiseThresholdV) {
-        isNoise = true;
-    }
-    
-    // Критерий 3: абсолютный минимум (50V — минимальное реальное напряжение)
-    if (_voltageRMS < PHASE_LOSS_THRESHOLD) {
-        isNoise = true;
-    }
-    
-    if (isNoise) {
+    // Additional voltage threshold - anything below 50V is noise without mains
+    // Real mains voltage should be 180V+ even with significant sag
+    if (_voltageRMS < 50.0f) {
         _voltageRMS = 0.0;
     }
     

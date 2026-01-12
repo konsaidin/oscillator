@@ -252,23 +252,13 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.onEvent(WiFiEvent);  // Регистрируем обработчик событий WiFi
     delay(100);  // Даём время на инициализацию lwIP стека
-    
-    // Загружаем конфигурацию (без запуска HTTP сервера)
-    webConfig.loadConfig();
-    
-    // Попытка подключения к сохранённому WiFi
-    if (!webConfig.connectToSavedWiFi()) {
-        // Если не удалось подключиться, запускаем AP режим для конфигурации
-        Serial.println("[WiFi] Starting AP mode for configuration...");
-        webConfig.startAPMode();
-        
-        // Ждём подключения пользователя (но не блокируем)
-        Serial.printf("[WiFi] Connect to '%s' and open http://%s\n", 
-                      AP_SSID, webConfig.getIPAddress().c_str());
+
+    // NOTE: Web configuration panel temporarily disabled — use hardcoded config
+    // Попробуем подключиться к жёстко заданной сети из config.h
+    if (!connectWiFi()) {
+        Serial.println("[WiFi] Connection failed (hardcoded). Continuing without AP or web panel.");
+        // Do not start AP mode — web panel is disabled for now
     }
-    
-    // Теперь запускаем веб-сервер (WiFi уже инициализирован)
-    webConfig.begin();
     
     // Синхронизация времени через NTP
     if (!syncTime()) {
@@ -278,10 +268,10 @@ void setup() {
     
     // Быстрая проверка доступности InfluxDB (используем настройки из WebConfig)
     influxClient.begin(
-        webConfig.getInfluxURL().c_str(), 
-        webConfig.getInfluxOrg().c_str(), 
-        webConfig.getInfluxBucket().c_str(), 
-        webConfig.getInfluxToken().c_str()
+        INFLUXDB_URL, 
+        INFLUXDB_ORG, 
+        INFLUXDB_BUCKET, 
+        INFLUXDB_TOKEN
     );
     
     Serial.println("[InfluxDB] Checking connection...");
@@ -318,8 +308,7 @@ void setup() {
 void loop() {
     unsigned long currentTime = millis();
     
-    // Обработка веб-запросов
-    webConfig.handle();
+    // Web panel disabled — no webConfig handling
     
     // Периодическая проверка WiFi (каждые 60 секунд)
     // WiFi автоматически переподключается, но проверяем для лога
@@ -347,7 +336,7 @@ void loop() {
         lastPowerData = data;  // Сохраняем для веб-интерфейса
         
         // Формирование и отправка данных
-        String lineProtocol = analyzer.toLineProtocol(webConfig.getDeviceID().c_str());
+        String lineProtocol = analyzer.toLineProtocol(DEVICE_ID);
         
         SendStatus status = influxClient.send(lineProtocol);
         
